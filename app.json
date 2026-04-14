@@ -9,7 +9,14 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.salessimulator",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to improve your experience.",
+        "NSMicrophoneUsageDescription": "Allow microphone usage for better app interaction.",
+        "NSPhotoLibraryUsageDescription": "Allow photo library access to upload and share images.",
+        "NSSpeechRecognitionUsageDescription": "Allow speech recognition for better responses."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +26,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.ajeetre.salescripterapp"
     },
     "web": {
       "output": "static",
@@ -27,6 +35,7 @@
     },
     "plugins": [
       "expo-router",
+      "react-native-iap",
       [
         "expo-splash-screen",
         {
