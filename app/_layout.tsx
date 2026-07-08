@@ -8,10 +8,12 @@ import { Provider, useDispatch, useSelector } from "react-redux";
 import {
   deleteAccount,
   logoutUser,
+  renewSubscription,
   restoreSession,
 } from "../redux/slices/authSlice";
 import type { AppDispatch, RootState } from "../redux/store";
 import { store } from "../redux/store";
+import { retryPendingGrant } from "../utils/iapGrant";
 
 function Startup() {
   const dispatch = useDispatch<AppDispatch>();
@@ -19,9 +21,19 @@ function Startup() {
   const { userInfo, deletingAccount } = useSelector(
     (state: RootState) => state.auth,
   );
-  console.log("User Info on Startup:", userInfo);
   useEffect(() => {
     dispatch(restoreSession());
+
+    // If a previous purchase was paid for but the backend grant failed, the
+    // subscription screen left a pending-grant record. Retry it on every app
+    // start so recovery doesn't depend on the user landing back on the
+    // paywall, then refresh subscription state so the app routes correctly.
+    retryPendingGrant().then((granted) => {
+      if (granted) {
+        dispatch(renewSubscription());
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

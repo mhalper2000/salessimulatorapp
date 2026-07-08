@@ -40,24 +40,17 @@ interface SystemPromptParams {
 const BASE_URL = "https://salesscripter.com/pro/";
 
 const getUserDetails = async (router: Router) => {
-  console.log("getUserDetails called");
   try {
     const userData = await fetch(`${BASE_URL}sales-simulator/user-details`);
     const userinfo = await userData.json();
-    console.log("userinfo subscription", userinfo);
-    if (userinfo.subscription) {
-      console.log("user subscribed");
-    } else {
-      console.log("user not subscribed");
+    if (!userinfo.subscription) {
       if (Platform.OS === "ios") {
         router.replace("/ios-subscription");
       } else {
         router.replace("/upgrade-plan");
       }
     }
-  } catch (err) {
-    console.error("getUserDetails error", err);
-  }
+  } catch {}
 };
 
 export default function CharBox() {
@@ -139,22 +132,16 @@ export default function CharBox() {
       // Stop TTS immediately
       try {
         Speech.stop();
-      } catch (err) {
-        console.warn("Speech.stop error on cleanup:", err);
-      }
+      } catch {}
 
       // Stop and destroy Voice (STT)
       (async () => {
         try {
           await Voice.cancel();
-        } catch (err) {
-          console.warn("Voice.cancel error on cleanup:", err);
-        }
+        } catch {}
         try {
           await Voice.destroy();
-        } catch (err) {
-          console.error("Error destroying Voice:", err);
-        }
+        } catch {}
         Voice.removeAllListeners();
       })();
 
@@ -181,14 +168,10 @@ export default function CharBox() {
           "Content-Type": "application/x-www-form-urlencoded",
         },
       });
-    } catch (error) {
-      console.error("Error while saving chat history:", error);
-    }
+    } catch {}
   };
 
   const handleGeneratePrompt = async (welcomeMessage: string) => {
-    console.log("systemPrompt>>>>>>>>>> Handle Generate Prompt called");
-    console.log(inputParams, "INPUT PARAMS");
     const params = {
       username: inputParams.currentUserName,
       soldProduct: inputParams.productSold,
@@ -212,11 +195,8 @@ export default function CharBox() {
     // params.defficultyLevel = "intermediate";
     // params.language = "English";
 
-    // console.log('systemPrompt>>>>>>>>>> Parameters before calling:', params);
-
     try {
       const response = await systemPromptRequest(params);
-      console.log("systemPrompt>>>>>>>>>>", response.prompt);
       if (response && response.prompt) {
         let tempAI = chatsAI;
         tempAI.push({
@@ -230,22 +210,12 @@ export default function CharBox() {
 
         // Update the state
         setChatsAI([...tempAI]);
-      } else {
-        console.error("Invalid response or missing prompt");
       }
-    } catch (error) {
-      console.error("Error: 12312", error);
-    }
+    } catch {}
   };
 
   useEffect(() => {
-    // console.log('......2');
-    // resetRole();
-    // if (!service) return;
-    // let welcomeMessage = roles[service].welcomeNote || 'Hello this is Mark.';
-
     let welcomeMessage = "";
-    console.log(inputParams.scenario, "SCENARIOASASASASA");
     if (inputParams.scenario !== null) {
       if (inputParams.scenario === "outbound-phone-call-b2b") {
         welcomeMessage = "Hello this is Alex.";
@@ -283,7 +253,6 @@ export default function CharBox() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      console.log("Periodic subscription check");
       getUserDetails(router);
     }, 30000);
 
@@ -342,9 +311,7 @@ export default function CharBox() {
     setPartialResults([]);
     try {
       await Voice.start("en-US");
-    } catch {
-      console.log("There's some error...");
-    }
+    } catch {}
   };
 
   const readText = async (text: string) => {
@@ -362,11 +329,8 @@ export default function CharBox() {
         onDone: () => {
           if (shouldListen.current) startRecognizing();
         },
-        onError: (err) => console.error("Speech.speak error", err),
       });
-    } catch (err) {
-      console.warn("Speech readText error:", err);
-    }
+    } catch {}
   };
 
   const getIntentFallBack = async (data: any) => {
@@ -381,9 +345,7 @@ export default function CharBox() {
             body: formData,
           },
         );
-      } catch (err) {
-        console.log("get intent fallback error", err);
-      }
+      } catch {}
     }
   };
 
@@ -397,8 +359,7 @@ export default function CharBox() {
     defficultyLevel,
     language,
   }: SystemPromptParams) => {
-    const url =
-      "https://salesscripter.com/vshserver/trashpage/simulator/system-prompt";
+    const url = "https://salesscripter.com/pro/simulator/system-prompt";
 
     // Create a FormData object
     const formData = new FormData();
@@ -422,39 +383,30 @@ export default function CharBox() {
       }
 
       const data = await response.json();
-      console.log(data, "Prompt DATA");
       return data;
-    } catch (error) {
-      console.error("Error making POST request:", error);
+    } catch {
       return null;
     }
   };
   const initChatgptAPI = async () => {
-    const apiKey = process.env.OPENAI_API_KEY;
-    const apiUrl = "https://api.openai.com/v1/chat/completions";
-    // const tempAI = chatsAI;
-    const data = {
-      messages: chatsAI,
-      model: "gpt-4o-mini", // Adjust model as needed
-      max_tokens: 1000,
-    };
-    // console.log(data, 'WE PASSING THIS');
+    const apiUrl = "https://salesscripter.com/pro/api/getResponseFromChatGPT";
+
+    const body = new URLSearchParams();
+    body.append("username", String(inputParams.currentUserName ?? ""));
+    chatsAI.forEach((msg, index) => {
+      body.append(`conversation[${index}][role]`, msg.role);
+      body.append(`conversation[${index}][content]`, msg.content);
+    });
+
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "OpenAI-Organization": "org-CCLjMqKvxy6jxGrGwp047Bew",
-          "OpenAI-Project": "proj_TEab95MBA18m2yKdqUGjXg8i",
-        },
-        body: JSON.stringify(data),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
       });
 
       if (response.ok) {
-        const responseData = await response.json();
-        const content = responseData.choices[0].message.content;
-        // console.log(content.replace(/\n/g, '<br />'), 'WE GOT THIS');
+        const content = await response.text();
         let tempAI = chatsAI;
         tempAI.push({
           role: "assistant",
@@ -463,13 +415,8 @@ export default function CharBox() {
         setChatsAI([...tempAI]);
         await readText(content);
         await saveChatHistory("agent", content);
-        // return content.replace(/\n/g, '<br />');
-      } else {
-        console.error("API request failed with status:", response.status);
       }
-    } catch (error) {
-      console.error("Error while making API request:", error);
-    }
+    } catch {}
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -495,13 +442,10 @@ export default function CharBox() {
         sendAt: new Date().toISOString(),
       });
 
-      // console.log(chats, 'ALL CHATS');
       setChats([...temp]);
       await readText(intentData.response);
       // initChatgptAPI(chatsAI);
-    } catch (err) {
-      console.log("get intent error", err);
-    }
+    } catch {}
   };
 
   return (

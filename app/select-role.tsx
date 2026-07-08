@@ -59,11 +59,9 @@ export default function SelectRoleScreen() {
     (dispatch as any)(fetchUserDetails())
       .unwrap()
       .then((res: any) => {
-        console.log("User Details:", res);
         (dispatch as any)(fetchFields(res.username))
           .unwrap()
           .then((fieldsData: any) => {
-            console.log("Fetched Fields Data:", fieldsData);
             // Auto-populate fields with last used values
             if (fieldsData.productSold && fieldsData.productSold.length > 0) {
               setProductSold(
@@ -131,20 +129,9 @@ export default function SelectRoleScreen() {
   };
 
   const onStart = async () => {
-    console.log("Starting with values:", {
-      scenario: valueScenario,
-      difficultyLevel: valueLevel,
-      language,
-      productSold,
-      prospectTitle,
-      productDetails,
-      additionalDetails,
-    });
     const BASE_URL = "https://salesscripter.com/pro/";
     let userData = await fetch(`${BASE_URL}sales-simulator/user-details`);
-    console.log("User Data Response: ", userData);
     const userinfo = await userData.json();
-    console.log("User Info  2112: ", userinfo);
     await (dispatch as any)(
       saveUserFields({
         scenario: valueScenario,
