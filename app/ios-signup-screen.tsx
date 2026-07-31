@@ -1,3 +1,4 @@
+import { useHeaderHeight } from "@react-navigation/elements";
 import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useState } from "react";
@@ -5,7 +6,9 @@ import {
   Alert,
   BackHandler,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,9 +34,14 @@ const viewIcon = require("../assets/images/view.png");
 
 const PRODUCT_SKU = "com.salesscriptor.oneweekfreetrial";
 
+// iOS' default placeholder colour renders almost invisibly on this background,
+// so every field sets it explicitly.
+const PLACEHOLDER_COLOR = "#8A8A8E";
+
 export default function IOSSignupScreen() {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
+  const headerHeight = useHeaderHeight();
 
   /* ---------------- Redux state ---------------- */
   const { firstName, lastName, email, signupPassword, showSignupPassword } =
@@ -41,6 +49,27 @@ export default function IOSSignupScreen() {
 
   /* ---------------- Local state ---------------- */
   const [loading, setLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  /* ---------------- Keyboard ---------------- */
+  // The logo and the spacing around the fields are dropped while the keyboard
+  // is up, which is what keeps the Sign Up button on screen.
+  useEffect(() => {
+    const isIOS = Platform.OS === "ios";
+    const showSub = Keyboard.addListener(
+      isIOS ? "keyboardWillShow" : "keyboardDidShow",
+      () => setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(
+      isIOS ? "keyboardWillHide" : "keyboardDidHide",
+      () => setKeyboardVisible(false),
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   /* ---------------- Back handler ---------------- */
   useEffect(() => {
@@ -193,46 +222,86 @@ export default function IOSSignupScreen() {
     );
   }
 
-  return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-      <KeyboardAvoidingView style={styles.container} behavior="padding">
-        <Image source={ssLogo} style={styles.logo} />
+  const form = (
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={[
+        styles.container,
+        keyboardVisible && styles.containerCompact,
+      ]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      showsVerticalScrollIndicator={false}
+      // iOS insets the scroll view by the real keyboard height itself, which
+      // is reliable in a way the manual KeyboardAvoidingView offset was not.
+      automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+    >
+      {!keyboardVisible && <Image source={ssLogo} style={styles.logo} />}
 
-        <Text style={styles.heading}>Sign Up</Text>
+      <Text style={[styles.heading, keyboardVisible && styles.headingCompact]}>
+        Sign Up
+      </Text>
 
-        <Input
-          placeholder="First Name"
-          value={firstName}
-          onChangeText={(v) =>
-            dispatch(inputChange({ field: "firstName", value: v }))
-          }
-        />
+      <Input
+        label="First Name"
+        placeholder="First Name"
+        value={firstName}
+        compact={keyboardVisible}
+        autoCapitalize="words"
+        autoCorrect={false}
+        textContentType="givenName"
+        onChangeText={(v: string) =>
+          dispatch(inputChange({ field: "firstName", value: v }))
+        }
+      />
 
-        <Input
-          placeholder="Last Name"
-          value={lastName}
-          onChangeText={(v) =>
-            dispatch(inputChange({ field: "lastName", value: v }))
-          }
-        />
+      <Input
+        label="Last Name"
+        placeholder="Last Name"
+        value={lastName}
+        compact={keyboardVisible}
+        autoCapitalize="words"
+        autoCorrect={false}
+        textContentType="familyName"
+        onChangeText={(v: string) =>
+          dispatch(inputChange({ field: "lastName", value: v }))
+        }
+      />
 
-        <Input
-          placeholder="Email"
-          value={email}
-          onChangeText={(v) =>
-            dispatch(inputChange({ field: "email", value: v }))
-          }
-        />
+      <Input
+        label="Email"
+        placeholder="Email"
+        value={email}
+        compact={keyboardVisible}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="emailAddress"
+        onChangeText={(v: string) =>
+          dispatch(inputChange({ field: "email", value: v }))
+        }
+      />
 
+      <View
+        style={[
+          styles.inputWrapper,
+          keyboardVisible && styles.inputWrapperCompact,
+        ]}
+      >
+        <Text style={styles.label}>Password</Text>
         <View style={styles.passwordRow}>
           <TextInput
             placeholder="Password"
+            placeholderTextColor={PLACEHOLDER_COLOR}
             secureTextEntry={!showSignupPassword}
             value={signupPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="newPassword"
             onChangeText={(v) =>
               dispatch(inputChange({ field: "signupPassword", value: v }))
             }
-            style={[styles.input, { flex: 1 }]}
+            style={[styles.input, styles.flex]}
           />
           <TouchableOpacity onPress={() => dispatch(toggleShowPassword())}>
             <Image
@@ -241,36 +310,77 @@ export default function IOSSignupScreen() {
             />
           </TouchableOpacity>
         </View>
+      </View>
 
-        <TouchableOpacity style={styles.button} onPress={signup}>
-          <Text style={styles.buttonText}>Sign Up</Text>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
+      <TouchableOpacity
+        style={[styles.button, keyboardVisible && styles.buttonCompact]}
+        onPress={signup}
+      >
+        <Text style={styles.buttonText}>Sign Up</Text>
+      </TouchableOpacity>
     </ScrollView>
+  );
+
+  // Android has no equivalent of the iOS keyboard inset, so it still needs the
+  // avoiding view.
+  if (Platform.OS === "ios") return form;
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior="height"
+      keyboardVerticalOffset={headerHeight}
+    >
+      {form}
+    </KeyboardAvoidingView>
   );
 }
 
 /* ---------------- Input ---------------- */
 
-const Input = (props: any) => (
-  <View style={styles.inputWrapper}>
-    <TextInput {...props} style={styles.input} />
+const Input = ({ label, compact, ...props }: any) => (
+  <View style={[styles.inputWrapper, compact && styles.inputWrapperCompact]}>
+    <Text style={styles.label}>{label}</Text>
+    <TextInput
+      {...props}
+      placeholderTextColor={PLACEHOLDER_COLOR}
+      style={styles.input}
+    />
   </View>
 );
 
 /* ---------------- Styles ---------------- */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: "center", padding: 20 },
-  logo: { width: 180, height: 60, marginVertical: 40 },
+  flex: { flex: 1 },
+  container: {
+    flexGrow: 1,
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    // Extra space so the form can always be scrolled clear of the keyboard.
+    paddingBottom: 320,
+  },
+  containerCompact: { paddingTop: 4 },
+  logo: { width: 180, height: 60, marginTop: 16, marginBottom: 24 },
   heading: { fontSize: 22, fontWeight: "600", marginBottom: 20 },
+  headingCompact: { marginBottom: 10 },
 
   inputWrapper: { width: "100%", marginBottom: 15 },
+  inputWrapperCompact: { marginBottom: 8 },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 6,
+  },
   input: {
     borderWidth: 1,
     borderColor: "#aaa",
     borderRadius: 6,
     padding: 10,
+    color: "#000",
+    backgroundColor: "#fff",
   },
 
   passwordRow: {
@@ -287,6 +397,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     borderRadius: 6,
   },
+  buttonCompact: { marginTop: 16 },
   buttonText: { color: "#fff", fontSize: 16 },
 
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },

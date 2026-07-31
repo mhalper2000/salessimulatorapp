@@ -39,10 +39,27 @@ interface SystemPromptParams {
 
 const BASE_URL = "https://salesscripter.com/pro/";
 
+// Shown when the backend accepts the request but sends nothing usable back, so
+// the user always gets a spoken reply instead of an empty bubble.
+const EMPTY_REPLY_FALLBACK =
+  "Sorry, I didn't catch that. Could you say that again?";
+const NO_PROMPT_FALLBACK =
+  "Sorry, this role play could not be started. Please go back and start it again.";
+
+// Longer than the 1s result debounce, so a reply that is already on its way
+// always takes precedence over restarting the microphone.
+const RETRY_LISTEN_MS = 1500;
+
 const getUserDetails = async (router: Router) => {
   try {
     const userData = await fetch(`${BASE_URL}sales-simulator/user-details`);
     const userinfo = await userData.json();
+
+    // The endpoint answers 200 with {status:false} when the session can't be
+    // read. That is not "no subscription" — treating it as one used to throw
+    // the user off the call mid-conversation.
+    if (!userinfo || userinfo.status === false) return;
+
     if (!userinfo.subscription) {
       if (Platform.OS === "ios") {
         router.replace("/ios-subscription");
@@ -60,14 +77,42 @@ export default function CharBox() {
   const results = useRef<string>("");
   const scrollViewRef = useRef<ScrollView>(null);
   const shouldListen = useRef(true);
+
+  // The conversation is kept in a ref as well as in state. Callbacks created
+  // during one render used to read `chatsAI` from a stale closure and then
+  // write it back, which silently dropped messages that had landed in between
+  // (that is why the "Hello this is Alex" greeting disappeared) and sent an
+  // incomplete conversation to the API.
+  const conversationRef = useRef<ChatAIMessage[]>([]);
+  const systemPromptRef = useRef<string | null>(null);
+  const systemPromptLoad = useRef<Promise<string | null> | null>(null);
+  const speaking = useRef(false);
+  const waitingForReply = useRef(false);
+  const listeningRef = useRef(false);
+  const retryListenTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const NOTACTIVE_MS = 8000; //15000;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [partialResults, setPartialResults] = useState<string[]>([]);
   const [chats, setChats] = useState<ChatMessage[]>([]);
   const [chatsAI, setChatsAI] = useState<ChatAIMessage[]>([]);
   const [listening, setListening] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [, setService] = React.useState<string | string[] | null>(null);
   const router = useRouter();
+
+  /** Keeps the ref (read from callbacks) in step with the rendered flag. */
+  const updateListening = (value: boolean) => {
+    listeningRef.current = value;
+    setListening(value);
+  };
+
+  /** True when nothing else has the mic/speaker and we may listen again. */
+  const canListen = () =>
+    shouldListen.current &&
+    !speaking.current &&
+    !waitingForReply.current &&
+    !listeningRef.current;
 
   useEffect(() => {
     setService(inputParams.role);
@@ -76,12 +121,27 @@ export default function CharBox() {
 
     // Setup Voice
     const onSpeechStart = () => {
-      setListening(true);
+      updateListening(true);
+    };
+
+    // Recognition ending without a usable result (silence, a cancelled
+    // session, a recogniser error) must not leave the mic off for good, so
+    // schedule a check. The delay clears the 1s result debounce below, which
+    // means an in-flight answer always wins over the restart.
+    const scheduleListenRetry = () => {
+      if (retryListenTimeout.current) {
+        clearTimeout(retryListenTimeout.current);
+      }
+      retryListenTimeout.current = setTimeout(() => {
+        if (canListen()) startRecognizing();
+      }, RETRY_LISTEN_MS);
     };
 
     const onSpeechEnd = () => {
       results.current = "";
       setPartialResults([]);
+      updateListening(false);
+      scheduleListenRetry();
     };
 
     let timeout: number | null = null;
@@ -109,7 +169,11 @@ export default function CharBox() {
     };
 
     const onSpeechError = (e: any) => {
-      setListening(false);
+      // iOS reports plain silence ("no speech detected") as an error. Without
+      // restarting, recognition never comes back and the screen sits on
+      // "Not Active" for the rest of the session.
+      updateListening(false);
+      scheduleListenRetry();
     };
 
     const onSpeechRecognized = (e: any) => {
@@ -128,6 +192,14 @@ export default function CharBox() {
     return () => {
       // Prevent TTS onDone from restarting voice recognition after unmount
       shouldListen.current = false;
+      speaking.current = false;
+      waitingForReply.current = false;
+      listeningRef.current = false;
+
+      if (retryListenTimeout.current) {
+        clearTimeout(retryListenTimeout.current);
+        retryListenTimeout.current = null;
+      }
 
       // Stop TTS immediately
       try {
@@ -171,7 +243,26 @@ export default function CharBox() {
     } catch {}
   };
 
-  const handleGeneratePrompt = async (welcomeMessage: string) => {
+  /** Appends to the conversation ref and mirrors it into state for rendering. */
+  const appendMessage = (message: ChatAIMessage) => {
+    conversationRef.current = [...conversationRef.current, message];
+    setChatsAI(conversationRef.current);
+  };
+
+  /**
+   * Fetches the system prompt once and caches it. The prompt is kept out of the
+   * rendered conversation and prepended only when calling the API — previously
+   * a failed fetch here meant the greeting was never displayed and every
+   * request went out without a system prompt.
+   */
+  const loadSystemPrompt = (): Promise<string | null> => {
+    if (systemPromptRef.current) {
+      return Promise.resolve(systemPromptRef.current);
+    }
+    if (systemPromptLoad.current) {
+      return systemPromptLoad.current;
+    }
+
     const params = {
       username: inputParams.currentUserName,
       soldProduct: inputParams.productSold,
@@ -183,35 +274,19 @@ export default function CharBox() {
       language: inputParams.language,
     };
 
-    // dummy data for testing
-    // params.username = "plombar";
-    // params.soldProduct = "CRM Software";
-    // params.prospectTitle = "Sales Manager";
-    // params.prospectObjections =
-    //   "We don't have the budget for new software right now.";
-    // params.additionalDetails =
-    //   "The prospect is looking to improve their sales process efficiency.";
-    // params.scenario = "outbound-phone-call-b2b";
-    // params.defficultyLevel = "intermediate";
-    // params.language = "English";
+    systemPromptLoad.current = systemPromptRequest(params)
+      .then((response) => {
+        const prompt = response && response.prompt ? response.prompt : null;
+        systemPromptRef.current = prompt;
+        return prompt;
+      })
+      .catch(() => null)
+      .finally(() => {
+        // Allow a retry on the next turn if it failed.
+        if (!systemPromptRef.current) systemPromptLoad.current = null;
+      });
 
-    try {
-      const response = await systemPromptRequest(params);
-      if (response && response.prompt) {
-        let tempAI = chatsAI;
-        tempAI.push({
-          role: "system",
-          content: response.prompt,
-        });
-        tempAI.push({
-          role: "assistant",
-          content: welcomeMessage,
-        });
-
-        // Update the state
-        setChatsAI([...tempAI]);
-      }
-    } catch {}
+    return systemPromptLoad.current;
   };
 
   useEffect(() => {
@@ -226,23 +301,15 @@ export default function CharBox() {
       }
     }
 
-    // let temp = chats;
+    // Show the greeting straight away. It used to be added only inside the
+    // system-prompt request, so whenever that call failed the greeting was
+    // spoken but never appeared on screen.
+    conversationRef.current = [{ role: "assistant", content: welcomeMessage }];
+    setChatsAI(conversationRef.current);
 
-    // temp.push({
-    //   from: 'bot',
-    //   message: welcomeMessage,
-    //   sendAt: new Date().toISOString(),
-    // });
+    // Fetched in parallel; it only has to be ready before the first reply.
+    loadSystemPrompt();
 
-    // let tempAI = chatsAI;
-    // tempAI.push({
-    //   role: 'assistant',
-    //   content: welcomeMessage,
-    // });
-    // // setChats([...temp]);
-
-    // setChatsAI([...tempAI]);
-    handleGeneratePrompt(welcomeMessage);
     readText(welcomeMessage);
     saveChatHistory("agent", welcomeMessage);
     return () => {
@@ -276,6 +343,11 @@ export default function CharBox() {
     setFirstVisit(true);
     setChats([]);
     setChatsAI([]);
+    setProcessing(false);
+    conversationRef.current = [];
+    waitingForReply.current = false;
+    speaking.current = false;
+    listeningRef.current = false;
 
     setState((prev) => {
       return { ...prev };
@@ -285,26 +357,24 @@ export default function CharBox() {
   // Using expo-speech per-speak callbacks; no global TTS finish callback needed
 
   const handleSpeechResponse = (speechResult: string) => {
-    if (speechResult.length) {
-      let temp = chats;
-      let tempAI = chatsAI;
-      temp.push({
+    if (!speechResult.length || waitingForReply.current) return;
+
+    updateListening(false);
+
+    setChats((prev) => [
+      ...prev,
+      {
         from: "user",
         message: speechResult,
         sendAt: new Date().toISOString(),
-      });
+      },
+    ]);
 
-      tempAI.push({
-        role: "user",
-        content: speechResult,
-      });
+    appendMessage({ role: "user", content: speechResult });
 
-      saveChatHistory("user", speechResult);
-      setChats([...temp]);
-      setChatsAI([...tempAI]);
-      // getIntent(speechResult);
-      initChatgptAPI();
-    }
+    saveChatHistory("user", speechResult);
+    // getIntent(speechResult);
+    initChatgptAPI();
   };
 
   const startRecognizing = async () => {
@@ -314,23 +384,43 @@ export default function CharBox() {
     } catch {}
   };
 
+  const resumeListening = () => {
+    speaking.current = false;
+    if (canListen()) startRecognizing();
+  };
+
   const readText = async (text: string) => {
-    setListening(false);
+    updateListening(false);
     setPartialResults([]);
+
+    const toSpeak = (text ?? "").trim();
+
+    // Speaking an empty string never fires onDone on iOS, which left the
+    // screen stuck on "Not Active" whenever the API returned nothing.
+    if (!toSpeak) {
+      resumeListening();
+      return;
+    }
+
     try {
       try {
         Speech.stop(); // fire-and-forget — no await avoids speak delay
       } catch {}
 
-      Speech.speak(text ?? "", {
+      speaking.current = true;
+      Speech.speak(toSpeak, {
         language: "en-US",
         rate: 0.9,
         pitch: 1.25,
-        onDone: () => {
-          if (shouldListen.current) startRecognizing();
+        onDone: resumeListening,
+        onError: resumeListening,
+        onStopped: () => {
+          speaking.current = false;
         },
       });
-    } catch {}
+    } catch {
+      resumeListening();
+    }
   };
 
   const getIntentFallBack = async (data: any) => {
@@ -391,13 +481,25 @@ export default function CharBox() {
   const initChatgptAPI = async () => {
     const apiUrl = "https://salesscripter.com/pro/api/getResponseFromChatGPT";
 
+    waitingForReply.current = true;
+    setProcessing(true);
+
+    // Without the system prompt the endpoint answers 200 with an empty body,
+    // so make sure it has loaded (or retried) before sending.
+    const systemPrompt = await loadSystemPrompt();
+
+    const conversation: ChatAIMessage[] = systemPrompt
+      ? [{ role: "system", content: systemPrompt }, ...conversationRef.current]
+      : [...conversationRef.current];
+
     const body = new URLSearchParams();
     body.append("username", String(inputParams.currentUserName ?? ""));
-    chatsAI.forEach((msg, index) => {
+    conversation.forEach((msg, index) => {
       body.append(`conversation[${index}][role]`, msg.role);
       body.append(`conversation[${index}][content]`, msg.content);
     });
 
+    let reply = "";
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -406,17 +508,26 @@ export default function CharBox() {
       });
 
       if (response.ok) {
-        const content = await response.text();
-        let tempAI = chatsAI;
-        tempAI.push({
-          role: "assistant",
-          content: content,
-        });
-        setChatsAI([...tempAI]);
-        await readText(content);
-        await saveChatHistory("agent", content);
+        reply = (await response.text()).trim();
       }
     } catch {}
+
+    // Never push an empty bubble — say something so the user knows where they
+    // stand and the conversation can carry on.
+    if (!reply) {
+      reply = systemPrompt ? EMPTY_REPLY_FALLBACK : NO_PROMPT_FALLBACK;
+      appendMessage({ role: "assistant", content: reply });
+      waitingForReply.current = false;
+      setProcessing(false);
+      readText(reply);
+      return;
+    }
+
+    appendMessage({ role: "assistant", content: reply });
+    waitingForReply.current = false;
+    setProcessing(false);
+    readText(reply);
+    await saveChatHistory("agent", reply);
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -484,6 +595,8 @@ export default function CharBox() {
       </View>
       {listening ? (
         <Text style={styles.textAboveBtn}>Listening</Text>
+      ) : processing ? (
+        <Text style={styles.textAboveBtn}>Thinking…</Text>
       ) : !firstVisit ? (
         <Text style={styles.textAboveBtn}>Not Active</Text>
       ) : null}
