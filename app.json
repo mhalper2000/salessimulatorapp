@@ -15,7 +15,8 @@
         "NSLocationWhenInUseUsageDescription": "This app uses your location to improve your experience.",
         "NSMicrophoneUsageDescription": "Allow microphone usage for better app interaction.",
         "NSPhotoLibraryUsageDescription": "Allow photo library access to upload and share images.",
-        "NSSpeechRecognitionUsageDescription": "Allow speech recognition for better responses."
+        "NSSpeechRecognitionUsageDescription": "Allow speech recognition for better responses.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -52,6 +53,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6de04f4b-6929-422a-b394-ccc3ec3853cc"
+      }
+    },
+    "owner": "ajeetre"
   }
 }
