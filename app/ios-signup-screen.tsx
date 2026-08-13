@@ -168,10 +168,9 @@ export default function IOSSignupScreen() {
           (result as any).payload ||
           (result as any).error?.message ||
           "Signup failed";
-        Alert.alert(msg);
-      } else {
-        router.replace("/login");
+        Alert.alert("Signup failed", msg);
       }
+      // addNewUser navigates on success — do not send user back to login
     } catch (e) {
       Alert.alert("Signup failed");
     }
