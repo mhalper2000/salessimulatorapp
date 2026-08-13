@@ -24,6 +24,10 @@ export const getCredentials = async () => {
   return { username, password };
 };
 
+export const getStoredCookies = async (): Promise<string | null> => {
+  return SecureStore.getItemAsync(COOKIE_KEY);
+};
+
 export const clearCredentials = async () => {
   await SecureStore.deleteItemAsync(USERNAME_KEY);
   await SecureStore.deleteItemAsync(PASSWORD_KEY);

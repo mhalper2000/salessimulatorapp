@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 
-import { loginUser, toggleShowPassword } from "../redux/slices/authSlice";
+import { loginUser, toggleShowPassword, clearAuthError } from "../redux/slices/authSlice";
 import { AppDispatch, RootState } from "../redux/store";
 
 const ssLogo = require("../assets/images/ss_logo.png");
@@ -38,6 +38,15 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  /**
+   * Show login errors in a dialog (matches TestFlight UX) instead of raw parse errors.
+   */
+  useEffect(() => {
+    if (!error) return;
+    Alert.alert("Login failed", error);
+    dispatch(clearAuthError());
+  }, [error, dispatch]);
 
   /**
    * 🔀 Post-login redirection logic
@@ -148,12 +157,6 @@ export default function Login() {
             </TouchableOpacity>
           </View>
         </View>
-
-        {!!error && (
-          <View style={styles.center}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
 
         <TouchableOpacity
           style={[styles.loginBtn, loading && styles.loginBtnDisabled]}

@@ -1,8 +1,10 @@
 import {
   clearCredentials,
   getCredentials,
+  getStoredCookies,
   saveCredentials,
 } from "@/utils/authStorage";
+import { friendlyApiError, parseJsonResponse } from "@/utils/fetchJson";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import CookieManager from "@react-native-cookies/cookies";
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
@@ -13,6 +15,30 @@ import { formatDate, getExpiryDate } from "../../../app/helper/utils";
    API CONSTANTS
 ============================ */
 const BASE_URL = "https://salesscripter.com/pro/";
+
+async function restoreStoredCookies() {
+  const cookieStr = await getStoredCookies();
+  if (!cookieStr) return;
+
+  try {
+    const cookies = JSON.parse(cookieStr) as Record<
+      string,
+      { name: string; value: string; domain?: string; path?: string }
+    >;
+    for (const entry of Object.values(cookies)) {
+      if (entry?.name && entry?.value) {
+        await CookieManager.set("https://salesscripter.com", entry);
+      }
+    }
+  } catch {
+    // ignore malformed cookie snapshots
+  }
+}
+
+async function persistSessionCookies(username: string, password: string) {
+  const cookie = await CookieManager.get("https://salesscripter.com");
+  await saveCredentials(username, password, JSON.stringify(cookie));
+}
 
 /* ============================
    TYPES
@@ -56,24 +82,30 @@ export const loginUser = createAsyncThunk(
         body: formData.toString(),
       });
 
-      const loginData = await loginRes.json();
+      const loginData = await parseJsonResponse<{ status?: boolean; msg?: string }>(
+        loginRes,
+        "Login",
+      );
       if (!loginData?.status) {
         return rejectWithValue(loginData?.msg || "Invalid credentials");
       }
 
+      await persistSessionCookies(username, password);
+
       const userRes = await fetch(`${BASE_URL}sales-simulator/user-details`);
-      const userData = await userRes.json();
+      const userData = await parseJsonResponse<{ status?: boolean; userInfo?: unknown }>(
+        userRes,
+        "User details",
+      );
 
       if (!userData?.status) {
         return rejectWithValue("Failed to fetch user details");
       }
 
-      await saveCredentials(username, password);
-
       console.log("Login successful, user data:", userData);
       return userData;
-    } catch {
-      return rejectWithValue("Network error");
+    } catch (err) {
+      return rejectWithValue(friendlyApiError(err, "Login failed"));
     }
   },
 );
@@ -157,9 +189,11 @@ export const addNewUser = createAsyncThunk(
         },
       );
 
-      const createJson = await createRes.json();
+      const createJson = await parseJsonResponse<
+        Array<{ user_id?: number }> | { error?: string }
+      >(createRes, "Create user");
 
-      if (!createJson || !createJson[0] || !createJson[0].user_id) {
+      if (!Array.isArray(createJson) || !createJson[0]?.user_id) {
         await handleAmemberError({
           message: JSON.stringify(createJson || "create user failed"),
         });
@@ -167,19 +201,10 @@ export const addNewUser = createAsyncThunk(
         return rejectWithValue("Failed to create user");
       }
 
-      await AsyncStorage.setItem("user_id", createJson[0].user_id.toString());
-
-      // 2) update access
-      const userDataRes = await fetch(
-        `${BASE_URL}sales-simulator/user-details`,
-      );
-      const userinfo = await userDataRes.json();
+      const user_id = createJson[0].user_id.toString();
+      await AsyncStorage.setItem("user_id", user_id);
 
       const product_id = (await SecureStore.getItemAsync("product_id")) || "";
-      const user_id =
-        (await AsyncStorage.getItem("user_id")) ||
-        userinfo?.userInfo?.user_id?.toString() ||
-        "";
       const expire_days =
         (await SecureStore.getItemAsync("expire_days")) || "7";
 
@@ -200,7 +225,9 @@ export const addNewUser = createAsyncThunk(
         },
       );
 
-      const accessJson = await accessRes.json();
+      const accessJson = await parseJsonResponse(accessRes, "Grant access").catch(
+        () => null,
+      );
       if (!accessJson) {
         await handleAmemberError({
           message: JSON.stringify(accessJson || "update access failed"),
@@ -209,7 +236,7 @@ export const addNewUser = createAsyncThunk(
         return rejectWithValue("Failed to update access");
       }
 
-      // 3) validate/login user (same as validateUserInfo)
+      // Login before fetching authenticated user details
       const loginParams = new URLSearchParams({
         username: login.username,
         password: login.password,
@@ -220,40 +247,39 @@ export const addNewUser = createAsyncThunk(
         body: loginParams,
       });
 
-      const loginJson = await loginRes.json();
-      if (!loginJson || !loginJson.status) {
+      const loginJson = await parseJsonResponse<{ status?: boolean; msg?: string }>(
+        loginRes,
+        "Signup login",
+      );
+      if (!loginJson?.status) {
         navigation?.replace?.("/login");
         return rejectWithValue(loginJson?.msg || "Invalid credentials");
       }
 
-      // store credentials and cookie using secure storage helper
-      const cookie = await CookieManager.get("https://salesscripter.com");
-      await saveCredentials(
-        login.username,
-        login.password,
-        JSON.stringify(cookie),
-      );
+      await persistSessionCookies(login.username, login.password);
 
       const userRes = await fetch(`${BASE_URL}sales-simulator/user-details`);
-      const userData = await userRes.json();
+      const userData = await parseJsonResponse<{
+        status?: boolean;
+        subscription?: boolean;
+      }>(userRes, "User details");
 
       if (!userData?.status) {
         navigation?.replace?.("/login");
         return rejectWithValue("Failed to fetch user details");
       }
 
-      // navigation decisions mirror legacy saga
       if (userData.subscription) {
         navigation?.replace?.("/select-role");
       } else {
-        navigation?.replace?.("/login");
+        navigation?.replace?.("/ios-subscription");
       }
 
       return userData;
-    } catch (err: any) {
+    } catch (err: unknown) {
       await handleAmemberError({ message: String(err) });
       navigation?.replace?.("/login");
-      return rejectWithValue(err?.message || "Signup failed");
+      return rejectWithValue(friendlyApiError(err, "Signup failed"));
     }
   },
 );
@@ -265,6 +291,8 @@ export const restoreSession = createAsyncThunk(
       const creds = await getCredentials();
       if (!creds) throw new Error("No credentials");
 
+      await restoreStoredCookies();
+
       const formData = new URLSearchParams();
       formData.append("username", creds.username);
       formData.append("password", creds.password);
@@ -275,17 +303,25 @@ export const restoreSession = createAsyncThunk(
         body: formData.toString(),
       });
 
-      const loginData = await loginRes.json();
+      const loginData = await parseJsonResponse<{ status?: boolean }>(
+        loginRes,
+        "Restore session",
+      );
       if (!loginData?.status) throw new Error("Invalid session");
 
+      await persistSessionCookies(creds.username, creds.password);
+
       const userRes = await fetch(`${BASE_URL}sales-simulator/user-details`);
-      const userData = await userRes.json();
+      const userData = await parseJsonResponse<{ status?: boolean }>(
+        userRes,
+        "User details",
+      );
 
       if (!userData?.status) throw new Error("Session expired");
 
       return userData;
-    } catch {
-      return rejectWithValue("Session expired");
+    } catch (err) {
+      return rejectWithValue(friendlyApiError(err, "Session expired"));
     }
   },
 );
@@ -466,7 +502,10 @@ const authSlice = createSlice({
       .addCase(addNewUser.fulfilled, (state, action) => {
         state.loading = false;
         state.isLoggedIn = true;
-        state.userInfo = action.payload ?? null;
+        state.userInfo =
+          (action.payload as { userInfo?: unknown })?.userInfo ??
+          action.payload ??
+          null;
       })
       .addCase(addNewUser.rejected, (state, action) => {
         state.loading = false;
