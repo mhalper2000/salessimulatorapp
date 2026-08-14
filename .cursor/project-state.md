@@ -10,16 +10,16 @@
 |-------|-------|
 | Repo | `mhalper2000/salessimulatorapp` |
 | Local path | `/Users/ajeetre/Work/Salescripter/salescripter-app` |
-| Branch | `main` (auth fix merged via PR #1) |
+| Branch | `main` (PR #1 auth fix + PR #2 EAS/TestFlight prep merged) |
 | EAS project | `@ajeetre/salescripter-app` (`6de04f4b-6929-422a-b394-ccc3ec3853cc`) |
 | Slack channel (client) | `C0A72HHM7RU` (DM with Michael Halper) |
 | Workspace | `T018RSR2MJ4` |
 
 ## Current focus
 
-**Ship TestFlight build with auth fixes** — PR #1 merged to `main`. EAS project linked on `chore/eas-testflight-setup` (PR #2 open). iOS distribution credentials still require interactive setup. Signup dark-mode label fix added this run.
+**Ship TestFlight build with auth fixes** — PR #1 and PR #2 merged to `main` (auth fixes, EAS projectId, export compliance, signup dark-mode labels). Production iOS build blocked on interactive Apple distribution credential setup in EAS.
 
-## Development state (as of 2026-08-14, run 2)
+## Development state (as of 2026-08-14, run 3)
 
 ### Done
 
@@ -31,10 +31,10 @@
 - [x] Added `ITSAppUsesNonExemptEncryption: false` in `app.json` (export compliance)
 - [x] Signup form labels visible in dark mode (`ios-signup-screen.tsx` — explicit `#EBEBEB` background + heading color)
 - [x] Agent chat greeting/display fixes already in `main` (commit `9ceeaaa` — `conversationRef`, immediate welcome message)
+- [x] PR #2 merged to `main` — EAS projectId, owner, export compliance, signup label fix (`a08015e`)
 
 ### Not done
 
-- [ ] Merge PR #2 (`chore/eas-testflight-setup`) to `main` — EAS projectId + export compliance
 - [ ] Configure iOS distribution credentials in EAS (interactive)
 - [ ] Ship new TestFlight build (`eas build --platform ios --profile production`)
 - [ ] Submit build to TestFlight (`eas submit --platform ios`)
@@ -45,21 +45,20 @@
 ### Open issues from Slack (Michael)
 
 1. Signup validation error + login JSON parse error — **fixed in main**, not yet on TestFlight
-2. TestFlight build delivery / compliance email (Aug 3) — compliance flag added; build still pending
-3. Signup form labels missing, agent UI bugs (Jul 9) — **fixed in code** (labels/dark mode this run; agent chat in `9ceeaaa`); pending TestFlight verification
+2. TestFlight build delivery / compliance email (Aug 3) — compliance flag on `main`; build still pending
+3. Signup form labels missing, agent UI bugs (Jul 9) — **fixed in code**; pending TestFlight verification
 
 ## Next actions (priority order)
 
-1. **Human:** Merge PR #2, then run interactive iOS credential setup + production build:
+1. **Human:** Run interactive iOS credential setup + production build on `main`:
    ```bash
    cd /Users/ajeetre/Work/Salescripter/salescripter-app
    git checkout main && git pull
-   # Merge PR #2 first (EAS projectId + export compliance on main)
    eas credentials --platform ios   # interactive — sets distribution cert + provisioning profile
    eas build --platform ios --profile production
    eas submit --platform ios --latest
    ```
-2. Post update to Slack channel `C0A72HHM7RU` (fix merged, TestFlight ETA once build starts) — blocked: Slack MCP auth unavailable locally
+2. Post update to Slack channel `C0A72HHM7RU` (fixes merged to main, TestFlight ETA once build starts) — blocked: Slack MCP auth unsupported in local SDK
 3. Smoke-test signup → login flow on TestFlight (includes dark-mode signup labels)
 4. Confirm agent role-play greeting + replies on device
 
@@ -68,10 +67,9 @@
 - EAS account: `ajeetre` (logged in locally)
 - Bundle ID: `com.salessimulator`
 - Build failed non-interactively: *"Credentials are not set up. Run this command again in interactive mode."*
-- `app.json` now includes `extra.eas.projectId` and `owner: ajeetre`
-
-- Build failed non-interactively (2026-08-14 run 2): same credential error; buildNumber auto-incremented to 2 on EAS
-- PR #2 open: https://github.com/mhalper2000/salessimulatorapp/pull/2
+- `app.json` on `main` includes `extra.eas.projectId`, `owner: ajeetre`, and export compliance flag
+- PR #2 merged: https://github.com/mhalper2000/salessimulatorapp/pull/2 (`a08015e`)
+- Build failed non-interactively (2026-08-14 run 3): same credential error; buildNumber auto-incremented to 3 on EAS (no build started)
 
 ## Run log
 
@@ -81,6 +79,7 @@
 | 2026-08-13 (run 2) | Committed auth fixes to branch `fix/auth-json-parse-errors`, opened PR. Slack MCP auth unavailable — could not read/post channel. EAS logged in as `ajeetre`; TestFlight build blocked on PR merge + human approval. |
 | 2026-08-14 | PR #1 merged to `main`. Ran `eas init --force` (linked `@ajeetre/salescripter-app`). Production iOS build blocked on interactive Apple credential setup. Added export compliance flag. Slack MCP unavailable (local SDK). |
 | 2026-08-14 (run 2) | Fixed signup labels invisible in dark mode (`#EBEBEB` background + heading color). Confirmed agent chat fixes already in `main` (`9ceeaaa`). EAS build still blocked on interactive credentials. PR #2 open. Slack read/post unavailable. |
+| 2026-08-14 (run 3) | Merged PR #2 to `main` via `gh pr merge`. Retried `eas build --platform ios --profile production --non-interactive` — still blocked on interactive iOS distribution credentials (buildNumber bumped to 3). Slack read/post unavailable (MCP auth unsupported in local SDK). |
 
 ## Files touched recently
 
