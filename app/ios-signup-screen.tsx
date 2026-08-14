@@ -351,18 +351,25 @@ const Input = ({ label, compact, ...props }: any) => (
 /* ---------------- Styles ---------------- */
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, backgroundColor: "#EBEBEB" },
   container: {
     flexGrow: 1,
     alignItems: "center",
     paddingHorizontal: 20,
     paddingTop: 10,
+    // Match login screen — without this, dark mode makes #333 labels invisible.
+    backgroundColor: "#EBEBEB",
     // Extra space so the form can always be scrolled clear of the keyboard.
     paddingBottom: 320,
   },
   containerCompact: { paddingTop: 4 },
   logo: { width: 180, height: 60, marginTop: 16, marginBottom: 24 },
-  heading: { fontSize: 22, fontWeight: "600", marginBottom: 20 },
+  heading: {
+    fontSize: 22,
+    fontWeight: "600",
+    marginBottom: 20,
+    color: "#1a1a1a",
+  },
   headingCompact: { marginBottom: 10 },
 
   inputWrapper: { width: "100%", marginBottom: 15 },
