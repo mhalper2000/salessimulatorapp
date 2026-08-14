@@ -19,7 +19,7 @@
 
 **Ship TestFlight build with auth fixes** — PR #1 and PR #2 merged to `main` (auth fixes, EAS projectId, export compliance, signup dark-mode labels). Production iOS build blocked on interactive Apple distribution credential setup in EAS.
 
-## Development state (as of 2026-08-14, run 3)
+## Development state (as of 2026-08-14, run 4)
 
 ### Done
 
@@ -31,7 +31,7 @@
 - [x] Added `ITSAppUsesNonExemptEncryption: false` in `app.json` (export compliance)
 - [x] Signup form labels visible in dark mode (`ios-signup-screen.tsx` — explicit `#EBEBEB` background + heading color)
 - [x] Agent chat greeting/display fixes already in `main` (commit `9ceeaaa` — `conversationRef`, immediate welcome message)
-- [x] PR #2 merged to `main` — EAS projectId, owner, export compliance, signup label fix (`a08015e`)
+- [x] Added Slack CLI scripts for agent read/post without MCP (`scripts/slack-api.sh`, `scripts/slack-browser-setup.sh`)
 
 ### Not done
 
@@ -58,7 +58,7 @@
    eas build --platform ios --profile production
    eas submit --platform ios --latest
    ```
-2. Post update to Slack channel `C0A72HHM7RU` (fixes merged to main, TestFlight ETA once build starts) — blocked: Slack MCP auth unsupported in local SDK
+2. **Human:** Configure Slack tokens for agent (`./scripts/slack-browser-setup.sh`) then post update to `C0A72HHM7RU` — MCP auth unsupported in local SDK; CLI ready once `.env` has tokens
 3. Smoke-test signup → login flow on TestFlight (includes dark-mode signup labels)
 4. Confirm agent role-play greeting + replies on device
 
@@ -69,7 +69,8 @@
 - Build failed non-interactively: *"Credentials are not set up. Run this command again in interactive mode."*
 - `app.json` on `main` includes `extra.eas.projectId`, `owner: ajeetre`, and export compliance flag
 - PR #2 merged: https://github.com/mhalper2000/salessimulatorapp/pull/2 (`a08015e`)
-- Build failed non-interactively (2026-08-14 run 3): same credential error; buildNumber auto-incremented to 3 on EAS (no build started)
+- Build failed non-interactively (2026-08-14 run 4): same credential error; buildNumber auto-incremented to 4 on EAS (no build started)
+- Slack: MCP auth unsupported in local SDK; added `scripts/slack-api.sh` + `scripts/slack-browser-setup.sh` — `.env` empty, tokens not yet configured
 
 ## Run log
 
@@ -80,6 +81,7 @@
 | 2026-08-14 | PR #1 merged to `main`. Ran `eas init --force` (linked `@ajeetre/salescripter-app`). Production iOS build blocked on interactive Apple credential setup. Added export compliance flag. Slack MCP unavailable (local SDK). |
 | 2026-08-14 (run 2) | Fixed signup labels invisible in dark mode (`#EBEBEB` background + heading color). Confirmed agent chat fixes already in `main` (`9ceeaaa`). EAS build still blocked on interactive credentials. PR #2 open. Slack read/post unavailable. |
 | 2026-08-14 (run 3) | Merged PR #2 to `main` via `gh pr merge`. Retried `eas build --platform ios --profile production --non-interactive` — still blocked on interactive iOS distribution credentials (buildNumber bumped to 3). Slack read/post unavailable (MCP auth unsupported in local SDK). |
+| 2026-08-14 (run 4) | Retried EAS production iOS build — still blocked on interactive distribution credentials (buildNumber bumped to 4). Slack MCP auth failed. Added `scripts/slack-api.sh` + `scripts/slack-browser-setup.sh` for browser-token read/post; `.env` empty — human must run setup script. |
 
 ## Files touched recently
 
@@ -89,3 +91,5 @@
 - `redux/slices/authSlice/index.ts`
 - `app/ios-signup-screen.tsx` (dark-mode label visibility)
 - `app/login.tsx`
+- `scripts/slack-api.sh` (agent Slack read/post via browser tokens)
+- `scripts/slack-browser-setup.sh` (interactive token setup → `.env`)
