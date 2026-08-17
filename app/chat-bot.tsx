@@ -674,10 +674,15 @@ const styles = StyleSheet.create({
     margin: 10,
     borderTopColor: "#ddd",
   },
-  userChatText: { maxWidth: "93%", textAlign: "right" },
+  userChatText: {
+    maxWidth: "93%",
+    textAlign: "right",
+    color: "#1a1a1a",
+  },
   botChatText: {
     maxWidth: "93%",
     textAlign: "left",
+    color: "#1a1a1a",
   },
   action: {
     width: "100%",
@@ -703,6 +708,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
     marginBottom: 15,
+    color: "#333333",
   },
   btnStartRolePlay: {
     backgroundColor: "#F9F9F9",
