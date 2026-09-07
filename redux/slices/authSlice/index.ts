@@ -181,7 +181,7 @@ export const addNewUser = createAsyncThunk(
       }).toString();
 
       const createRes = await fetch(
-        "https://salesscripter.com/members/api/users",
+        "https://salesscripter.com/pro/api/users",
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
