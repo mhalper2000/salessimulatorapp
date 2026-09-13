@@ -22,7 +22,6 @@ export default function UpgradePlan() {
   const { userInfo } = useSelector((state: RootState) => state.auth);
 
   const openSignUp = useCallback(async () => {
-    console.log("User Info:", userInfo);
     if (!userInfo?.user_id) return;
 
     if (Platform.OS === "ios") {
@@ -30,7 +29,6 @@ export default function UpgradePlan() {
 
       router.replace("/ios-subscription");
     } else {
-      console.log("Opening signup webview for iOS");
       router.replace({
         pathname: "/webview",
         params: {

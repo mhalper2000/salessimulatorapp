@@ -3,8 +3,6 @@ const BASE_URL = "https://salesscripter.com/pro";
 export async function getUserDetails() {
   const res = await fetch(`${BASE_URL}/sales-simulator/user-details`);
   const json = await res.json();
-  console.log("Fetched user details:", json);
-
   return {
     username: json.userInfo.login,
     subscription: json.subscription,

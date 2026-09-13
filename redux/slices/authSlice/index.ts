@@ -102,7 +102,6 @@ export const loginUser = createAsyncThunk(
         return rejectWithValue("Failed to fetch user details");
       }
 
-      console.log("Login successful, user data:", userData);
       return userData;
     } catch (err) {
       return rejectWithValue(friendlyApiError(err, "Login failed"));
@@ -157,7 +156,6 @@ export const addNewUser = createAsyncThunk(
     { signup, login, navigation }: { signup: any; login: any; navigation: any },
     { rejectWithValue },
   ) => {
-    console.log("addNewUser payload", { signup, login });
     // validate payload
     if (
       !signup ||

@@ -52,14 +52,7 @@ export default function Login() {
    * 🔀 Post-login redirection logic
    */
   useEffect(() => {
-    console.log(
-      "Login state changed. isLoggedIn:",
-      isLoggedIn,
-      "userInfo:",
-      userInfo,
-    );
     if (!isLoggedIn || !userInfo) return;
-    console.log("User info:", userInfo);
 
     // 1️⃣ New user → Select role
     // if (isNewUser || !userInfo.role) {
